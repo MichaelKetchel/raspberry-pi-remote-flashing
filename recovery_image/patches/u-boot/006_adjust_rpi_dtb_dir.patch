@@ -1,0 +1,12 @@
+diff -Nur a/board/raspberrypi/rpi/rpi.c b/board/raspberrypi/rpi/rpi.c
+--- a/board/raspberrypi/rpi/rpi.c  2024-02-28 13:47:24.308437371 -0500
++++ b/board/raspberrypi/rpi/rpi.c      2024-02-28 13:47:39.508450615 -0500
+@@ -65,7 +65,7 @@
+ };
+ 
+ #ifdef CONFIG_ARM64
+-#define DTB_DIR "broadcom/"
++#define DTB_DIR ""
+ #else
+ #define DTB_DIR ""
+ #endif

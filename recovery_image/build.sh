@@ -31,8 +31,9 @@ IMAGE_NANE="recovery.img"
 IMAGE_PATH="${SCRIPT_PATH}/${IMAGE_NANE}"
 IMAGE_SIZE="10530816"       # kB (~10GB)
 TRUNCATE_IMAGE_AFTER="200M" #MB
-RPI_FIRMWARE_VER="1.20190925"
-U_BOOT_VER="2019.10"
+RPI_FIRMWARE_VER="1.20230405"
+U_BOOT_VER="2024.01"
+# U_BOOT_VER="2019.10"
 
 print_title() {
     echo ""
@@ -92,7 +93,7 @@ function patch_sources() {
         print_title "Patching U-BOOT.."
         # apply u-boot patches
         cd "u-boot-${U_BOOT_VER}"
-        for i in "${PATCHES_PATH}"/u-boot/*.patch; do patch -p1 <"$i"; done
+        for i in "${PATCHES_PATH}"/u-boot/*.patch; do patch -p1 -l <"$i"; done
         cd -
     fi
 }
@@ -103,8 +104,10 @@ function build_sources() {
     # Build U-BOOT
     print_title "Building U-BOOT.."
     cd "${SOURCES_PATH}/u-boot-${U_BOOT_VER}"
-    make ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- rpi_3_32b_defconfig
-    make ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- -j"$(nproc)"
+    # make ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- rpi_defconfig
+    # make ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- -j"$(nproc)"
+    make ARCH=arm CROSS_COMPILE=aarch64-linux-gnu- rpi_arm64_defconfig
+    make ARCH=arm CROSS_COMPILE=aarch64-linux-gnu- -j"$(nproc)"
 
     # Build Boot Script
     print_title "Building U-BOOT boot script.."
@@ -143,13 +146,20 @@ function create_image() {
     sudo mkdir -p /mnt/rpi
     sudo mount "/dev/mapper/${LOOPDEV}p1" /mnt/rpi
 
-    sudo cp -rv "${SOURCES_PATH}/firmware-${RPI_FIRMWARE_VER}/boot/"{bootcode.bin,fixup.dat,start.elf} /mnt/rpi/
+    sudo cp -rv "${SOURCES_PATH}/firmware-${RPI_FIRMWARE_VER}/boot/"{bootcode.bin,*.dat,*.elf,*.dtb} /mnt/rpi/
+    sudo cp -rv "${SOURCES_PATH}/firmware-${RPI_FIRMWARE_VER}/boot/overlays" /mnt/rpi/
+    # sudo cp -rv "${SOURCES_PATH}/firmware-${RPI_FIRMWARE_VER}/boot/"*.dtb /mnt/rpi/
+    # sudo mv /mnt/rpi/fixup4db.dat /mnt/rpi/fixup4.dat
+    # sudo mv /mnt/rpi/start4db.elf /mnt/rpi/start4.elf
     sudo cp -rv "${SCRIPT_PATH}/config.txt" /mnt/rpi/
+    # sudo cp -rv "${SCRIPT_PATH}/cmdline.txt" /mnt/rpi/
 
     # Copy U-BOOT Files
     sudo cp -rv "${SOURCES_PATH}/u-boot-${U_BOOT_VER}/u-boot.bin" /mnt/rpi/
     sudo cp -rv "${BUILD_PATH}/boot.scr.uimg" /mnt/rpi/
     sudo cp -rv "${SCRIPT_PATH}/env.txt" /mnt/rpi/
+    sudo cp -rv "${SCRIPT_PATH}/env.txt" /mnt/rpi/uboot.env
+
 
     sync
     sudo umount /mnt/rpi

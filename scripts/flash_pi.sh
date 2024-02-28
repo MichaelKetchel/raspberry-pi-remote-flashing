@@ -10,7 +10,7 @@
 # Description   :   This script receives path of image on the fs, and ip address of a target
 #                   that should be flashed with a new image.
 #                   Then, it looks for the MAC address and the RESET gpio on db/<HOSTNAME>.csv file,
-#                   creates a directory under /srv/tftp with which its name is the MAC address.
+#                   creates a d irectory under /srv/tftp with which its name is the MAC address.
 #                   If the image is bigger than 750MB, it splits it to 750MB parts,
 #                   with name format 'rpi_image_part_<#>', and put them in this folder.
 #                   If the image is smaller than 750MB, it moves the image to this folder
@@ -35,7 +35,7 @@ source exit_codes.sh
 # Globals
 PI_DB=""
 PATH_TO_IMAGE=""
-SLAVE_IP_ADDRESS=""
+SLAVE_IP_ADDRESS="192.170.1.57"
 SLAVE_MAC_ADDRESS=""
 SLAVE_RESET_GPIO=""
 TFTP_FOLDER=""
@@ -260,6 +260,6 @@ while getopts ":i:a:h:" args; do
 done
 
 script_inputs_check
-extract_pi_from_db
+# extract_pi_from_db
 prepare_tftp
 start_flashing

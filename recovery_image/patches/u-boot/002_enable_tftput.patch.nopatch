@@ -1,9 +1,12 @@
 diff -Nur a/configs/rpi_3_32b_defconfig b/configs/rpi_3_32b_defconfig
 --- a/configs/rpi_3_32b_defconfig	2019-12-26 14:57:37.104714165 +0200
 +++ b/configs/rpi_3_32b_defconfig	2019-12-26 14:59:34.572691822 +0200
-@@ -44,3 +44,4 @@
- CONFIG_CONSOLE_SCROLL_LINES=10
- CONFIG_PHYS_TO_BUS=y
+@@ -10,6 +10,7 @@
+ CONFIG_ENV_SIZE=0x4000
+ CONFIG_DEFAULT_DEVICE_TREE="bcm2837-rpi-3-b"
  CONFIG_OF_LIBFDT_OVERLAY=y
 +CONFIG_CMD_TFTPPUT=y
-\ No newline at end of file
+ CONFIG_SYS_LOAD_ADDR=0x1000000
+ CONFIG_BOOTSTD_DEFAULTS=y
+ CONFIG_OF_BOARD_SETUP=y
+

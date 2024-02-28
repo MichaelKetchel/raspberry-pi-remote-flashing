@@ -1,2 +1,8 @@
+arm_64bit=1
+#[pi4]
+#uart_2ndstage=1
+#start_debug=1
+
+[all]
 kernel=u-boot.bin
 enable_uart=1
