@@ -1,25 +1,4 @@
-#!/usr/bin/env bash
-
-# SPDX-License-Identifier: GPL-2.0 #
-# (C) Copyright Argus Cyber Security Ltd
-#  All rights reserved
-
-#######################################################################################################################
-# Script Name   :   Boot Script
-# Description   :   This is an U-Boot boot script file.
-#                   It executes on boot by U-Boot and load an environment file
-#                   called env.txt from the MMC first partition.
-#                   This env file contains the target IP address and the server address.
-#                   It then tries to fetch a file from the server's TFTP
-#                   from a folder named by the target MAC address.
-#                   If it finds the image, it then fetch and flash it to the MMC second and third partitions.
-#                   When flashing finished or a file wasn't find, and then
-#                   loading the 'cmdline.txt' file from the second partition and continues to boot.
-# Args          :
-# Date          :   23/11/2020
-# Author        :   Itay Sperling
-# Email         :   itay.sperling@argus-sec.com
-#######################################################################################################################
+#!/bin/sh
 
 # Keep only MMC boot as a boot target - disable all other boot methods
 setenv boot_targets mmc0
@@ -29,7 +8,7 @@ setenv netconsole 1
 
 # load env file and assign some variables
 load mmc 0:1 $loadaddr env.txt
-env import -t $loadaddr $filesize serverip ipaddr image_name netconsole nc_ip
+env import -t $loadaddr $filesize serverip ipaddr image_name netconsole nc_ip mmc_write_offset_hex
 
 # forward the console from serial to netconsole
 if test $netconsole = '1'; then
@@ -39,7 +18,7 @@ if test $netconsole = '1'; then
     run nc
 fi
 
-echo "==== ARGUS U-BOOT FLASHING SCRIPT ====="
+echo "==== KETCH THIS U-BOOT FLASHING SCRIPT ====="
 # debug print assigned addresses. 
 # we assigned 'serverip' and 'ipaddr' from env.txt
 printenv serverip
@@ -73,7 +52,8 @@ if test ${filesize} > 0; then
     #fatrm mmc 0:2 image-version-info
 
     # Calculate addresses and write first file (skipping the partition table) to MMC (SD Card)
-    setenv mmc_offset 16000
+    # setenv mmc_offset 16000
+    setenv mmc_offset $mmc_write_offset_hex
     setexpr blocks_to_skip $pt_size_bytes / 200 ;
     setexpr img_size_blk $filesize / 200 ;
     setexpr blocks_to_write $img_size_blk - $blocks_to_skip ;
@@ -167,8 +147,11 @@ echo ""
 # fatload mmc 0:2 ${ramdisk_addr_r} initramfs8
 # echo ""
 
+setenv kernel_comp_addr_r 0x1400000
+setenv kernel_comp_size 0x6000000
+
 echo "Booting.."
 # Boot file kernel and device
 # booti ${kernel_addr_r} - ${fdt_addr_r}
 # booti ${kernel_addr_r} ${ramdisk_addr_r} ${fdt_addr}
-booti ${kernel_addr_r} - ${fdt_addr}
+# booti ${kernel_addr_r} - ${fdt_addr}

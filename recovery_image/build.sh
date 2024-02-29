@@ -29,11 +29,26 @@ SCRIPTS_PATH="${SCRIPT_PATH}/scripts"
 ## Settings
 IMAGE_NANE="recovery.img"
 IMAGE_PATH="${SCRIPT_PATH}/${IMAGE_NANE}"
-IMAGE_SIZE="10530816"       # kB (~10GB)
-TRUNCATE_IMAGE_AFTER="200M" #MB
+# IMAGE_SIZE="10530816"       # kB (~10GB)
+# TRUNCATE_IMAGE_AFTER="200M" #MB
+# RPI_FIRMWARE_VER="1.20230405"
+# U_BOOT_VER="2024.01"
+# # U_BOOT_VER="2019.10"
+TRUNCATE_IMAGE_AFTER="700M" #MB
+
+# Be careful when changing the following. U-boot version should be compatible with firmware version.
+# RPI_FIRMWARE_VER="1.20210831"
 RPI_FIRMWARE_VER="1.20230405"
+# U_BOOT_VER="2021.10"
 U_BOOT_VER="2024.01"
-# U_BOOT_VER="2019.10"
+
+# Toolchain for 32 bits: arm-linux-gnueabi
+# Toolchain for 64 bits: aarch64-linux-gnu
+TOOLCHAIN=aarch64-linux-gnu
+
+# defconfig for 32 bits: rpi_4_32b_defconfig
+# toolchain for 64 bits: rpi_4_defconfig
+DEFCONFIG=rpi_arm64_defconfig
 
 print_title() {
     echo ""
@@ -60,7 +75,7 @@ function parse_script_args() {
 
 function handle_dependencies() {
     print_title "Installing dependencies.."
-    sudo apt-get install make bison flex kpartx u-boot-tools gcc-arm-linux-gnueabi coreutils -y
+    sudo apt-get install make bison flex kpartx u-boot-tools gcc-${TOOLCHAIN} coreutils -y
 }
 
 function get_sources() {
@@ -104,10 +119,8 @@ function build_sources() {
     # Build U-BOOT
     print_title "Building U-BOOT.."
     cd "${SOURCES_PATH}/u-boot-${U_BOOT_VER}"
-    # make ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- rpi_defconfig
-    # make ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- -j"$(nproc)"
-    make ARCH=arm CROSS_COMPILE=aarch64-linux-gnu- rpi_arm64_defconfig
-    make ARCH=arm CROSS_COMPILE=aarch64-linux-gnu- -j"$(nproc)"
+    make ARCH=arm CROSS_COMPILE=${TOOLCHAIN}- ${DEFCONFIG}
+    make ARCH=arm CROSS_COMPILE=${TOOLCHAIN}- -j"$(nproc)"
 
     # Build Boot Script
     print_title "Building U-BOOT boot script.."
@@ -122,20 +135,52 @@ function create_image() {
     # Remove old image if exists
     rm -rf "${IMAGE_PATH}"
 
-    # Create empty image with three partitions
-    sudo dd if=/dev/zero of="${IMAGE_PATH}" bs=1024 count=0 seek=${IMAGE_SIZE}
-    sudo parted -s "${IMAGE_PATH}" mklabel msdos
-    sudo parted -s "${IMAGE_PATH}" unit KiB mkpart primary fat32 4096 45056
-    sudo parted -s "${IMAGE_PATH}" set 1 boot on
-    sudo parted -s "${IMAGE_PATH}" unit KiB mkpart primary fat32 45056 86016
-    sudo parted -s "${IMAGE_PATH}" -- unit KiB mkpart primary ext2 86016 -1s
-    sudo parted "${IMAGE_PATH}" print
+        # Recovery Image Settings
+    # Use an uncompressed ext3 by default as rootfs
+    SDIMG_ROOTFS_TYPE="ext4"
+    ROOTFS_PT_SIZE="10485760" #10GB
+    # Boot partition size [in KiB] (will be rounded up to IMAGE_ROOTFS_ALIGNMENT)
+    BOOT_PART_SIZE="262144" # 256MB
+    # Set alignment to 4MB [in KiB]
+    IMAGE_ROOTFS_ALIGNMENT="4096"
+
+    BOOT_PART_SIZE_ALIGNED=$(( BOOT_PART_SIZE + IMAGE_ROOTFS_ALIGNMENT - 1 ))
+    BOOT_PART_SIZE_ALIGNED=$(( BOOT_PART_SIZE_ALIGNED - (( BOOT_PART_SIZE_ALIGNED % IMAGE_ROOTFS_ALIGNMENT)) ))
+    SDIMG_SIZE=$(( IMAGE_ROOTFS_ALIGNMENT + BOOT_PART_SIZE_ALIGNED + ROOTFS_PT_SIZE ))
+
+    UBOOT_PARTITION_START="${IMAGE_ROOTFS_ALIGNMENT}"
+    UBOOT_PARTITION_END=$(( BOOT_PART_SIZE_ALIGNED + IMAGE_ROOTFS_ALIGNMENT ))
+    BOOT_PARTITION_END=$(( UBOOT_PARTITION_END + BOOT_PART_SIZE_ALIGNED ))
+
+    MMC_WRITE_OFFSET=$((UBOOT_PARTITION_END * 1024 / 512))
+    MMC_OFFSET_HEX=$(printf "%x\n" $MMC_WRITE_OFFSET)
+
+    sudo dd if=/dev/zero of=${IMAGE_PATH} bs=1024 count=0 seek=${SDIMG_SIZE}
+    sudo parted -s ${IMAGE_PATH} mklabel msdos
+    sudo parted -s ${IMAGE_PATH} unit KiB mkpart primary fat32 ${UBOOT_PARTITION_START} ${UBOOT_PARTITION_END}
+    sudo parted -s ${IMAGE_PATH} set 1 boot on
+    sudo parted -s ${IMAGE_PATH} unit KiB mkpart primary fat32 ${UBOOT_PARTITION_END} ${BOOT_PARTITION_END}
+    sudo parted -s ${IMAGE_PATH} -- unit KiB mkpart primary ${SDIMG_ROOTFS_TYPE} ${BOOT_PARTITION_END} -1s
+    sudo parted ${IMAGE_PATH} print
 
     # Format partitions
     sudo kpartx -av "${IMAGE_PATH}"
+    kpartx_res=$(sudo kpartx -av "${IMAGE_PATH}")
+    print_title "$kpartx_res"
 
     # Get loop device name
-    LOOPDEV=$(losetup --list | grep "${IMAGE_PATH}" | cut -d ' ' -f1 | cut -d '/' -f3)
+     while IFS= read -r line;
+    do
+        echo "LINE: '${line}'"
+        loopdev_name=$(grep -oP '(?<=add map ).*?(?=p1)' <<< "${line}")
+        if [ ! -z "$loopdev_name" ]; then
+            break
+        fi
+    done <<< "$kpartx_res"
+
+    print_title "loopdev_name: $loopdev_name"
+
+    LOOPDEV="$loopdev_name"
 
     sudo mkfs.vfat -F32 -n raspberry "/dev/mapper/${LOOPDEV}p1"
     sudo mkfs.vfat -F32 -n raspberry "/dev/mapper/${LOOPDEV}p2"
@@ -158,7 +203,9 @@ function create_image() {
     sudo cp -rv "${SOURCES_PATH}/u-boot-${U_BOOT_VER}/u-boot.bin" /mnt/rpi/
     sudo cp -rv "${BUILD_PATH}/boot.scr.uimg" /mnt/rpi/
     sudo cp -rv "${SCRIPT_PATH}/env.txt" /mnt/rpi/
-    sudo cp -rv "${SCRIPT_PATH}/env.txt" /mnt/rpi/uboot.env
+    sudo chmod 777 /mnt/rpi/env.txt
+    echo "mmc_write_offset_hex=$MMC_OFFSET_HEX" >> /mnt/rpi/env.txt
+    sudo cp -rv "/mnt/rpi/env.txt" /mnt/rpi/uboot.env
 
 
     sync
@@ -166,7 +213,7 @@ function create_image() {
 
     cd "${BUILD_PATH}"
 
-    sudo kpartx -d "${IMAGE_PATH}"
+    sudo kpartx -dv "${IMAGE_PATH}"
 
     CURRENT_USER=$(whoami)
     sudo chown "${CURRENT_USER}:${CURRENT_USER}" "${IMAGE_PATH}"

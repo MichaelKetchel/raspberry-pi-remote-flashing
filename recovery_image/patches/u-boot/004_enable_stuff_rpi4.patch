@@ -1,7 +1,7 @@
 diff -Nur a/configs/rpi_4_defconfig b/configs/rpi_4_defconfig
 --- a/configs/rpi_4_defconfig      2024-01-08 10:37:48.000000000 -0500
 +++ b/configs/rpi_4_defconfig    2024-02-27 22:26:54.867876543 -0500
-@@ -65,3 +65,17 @@
+@@ -65,3 +65,13 @@
  CONFIG_VIDEO_BCM2835=y
  CONFIG_CONSOLE_SCROLL_LINES=10
  CONFIG_PHYS_TO_BUS=y
@@ -9,13 +9,9 @@ diff -Nur a/configs/rpi_4_defconfig b/configs/rpi_4_defconfig
 +CONFIG_NETCONSOLE=y
 +CONFIG_CMD_CAT=y
 +CONFIG_CMD_BOOTI=y
-+CONFIG_BZIP2=y
-+CONFIG_GZIP=y
-+CONFIG_LZ4=y
-+CONFIG_LZMA=y
-+CONFIG_LZO=y
-+CONFIG_ZSTD=y
 +CONFIG_CMD_WGET=y
 +CONFIG_PROT_TCP_SACK=y
 +CONFIG_CMD_MBR=y
 +CONFIG_CMD_BOOTZ=y
++CONFIG_BLKMAP=y
++CONFIG_HUSH_PARSER=y
