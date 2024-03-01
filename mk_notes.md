@@ -31,6 +31,8 @@ hex=$(([##16]dec))
 (4096 + 40960)*1024
 hex((4096 + 40960)*1024//512)
 
+```shell
+
 setenv bootargs console=ttyS0,115200 console=tty1 root=PARTUUID=35c84628-03 rootfstype=ext4 fsck.repair=yes rootwait quiet init=/usr/lib/raspberrypi-sys-mods/firstboot 8250.nr_uarts=1 initcall_blacklist=bcm2708_fb_init
 
 
@@ -52,30 +54,42 @@ part list blkmap 0
 # Local part dims
 part start mmc 0 1 l_boot_part_start
 part size mmc 0 1 l_boot_part_size
+# part type mmc 0:1 l_boot_part_type
 
 setexpr l_boot_part_end $l_boot_part_start + $l_boot_part_size
 setexpr part_offset $l_boot_part_end
 
-# Set up start of mbr_parts
-# 8192*512/1024/1024
-# setenv mbr_parts "name=uboot,start=4M,size=256M,bootable,id=0x0c"
 
-# Takes a hex sector count and returns a hex megabyte value
-function sectors_to_mbytes(sectors)
-    
-end
+setexpr boot_part_start_hex $l_boot_part_start * 200
+setexpr boot_part_start_hex $boot_part_start_hex / 100000
 
+setexpr boot_part_size_hex $l_boot_part_size * 200
+setexpr boot_part_size_hex $boot_part_size_hex / 100000
 
-setenv mbr_parts "name=uboot,start=4M,size=512M,bootable,id=0x0c;name=rootfs,start=516M,size=2096M,id=0x83"
+setenv mbr_parts "name=uboot,start=0x${boot_part_start_hex}M,size=0x${boot_part_size_hex}M,bootable,id=0x0c;"
 
 part list blkmap 0 r_part_numbers
 for i in $r_part_numbers; do
     part start blkmap 0 $i r_part_start
-    part start blkmap 0 $i r_part_size
-    part type blkmap 0 $i r_part_type
+    part size blkmap 0 $i r_part_size
+    # part type blkmap 0 $i r_part_type
     setexpr new_part_num $i+1
-    echo "Would update part $i ($r_part_type) to $new_part_num at $part_offset"
-    setexpr part_offset $part_offset + $r_part_size
+    
+    # Hate this, but until `part type` is fixed, figuring this out another way is a real pain
+    setenv part_type "83"
+    if test "${i}" = "1"; then
+        setenv part_type "0c"
+    fi
+
+    setexpr r_part_start_hex $r_part_start * 200
+    setexpr r_part_start_hex $r_part_start_hex / 100000
+    setexpr r_part_start_hex $r_part_start_hex + $part_offset
+
+    setexpr r_part_size_hex $r_part_size * 200
+    setexpr r_part_size_hex $r_part_size_hex / 100000
+    echo "Updating part $i to $new_part_num at $r_part_start_hex"
+    # echo "Updating part $i ($r_part_type) to $new_part_num at $r_part_start_hex"
+    setenv mbr_parts "${mbr_parts}start=0x${r_part_start_hex}M,size=0x${r_part_size_hex}M,id=0x${part_type};"
 done
 
 ## Scratch box
@@ -84,3 +98,18 @@ setexpr a $l_boot_part_size * 200
 setexpr a $a / 100000
 echo "$a"
 
+
+
+
+# Set up start of mbr_parts
+# 8192*512/1024/1024
+# setenv mbr_parts "name=uboot,start=4M,size=256M,bootable,id=0x0c"
+
+# Takes a hex sector count and returns a hex megabyte value
+# function sectors_to_mbytes(sectors)
+#     setexpr stmbytes $sectors * 200
+#     setexpr stmbytes $stmbytes / 100000
+#     return $stmbytes
+# end
+
+```

@@ -34,7 +34,7 @@ IMAGE_PATH="${SCRIPT_PATH}/${IMAGE_NANE}"
 # RPI_FIRMWARE_VER="1.20230405"
 # U_BOOT_VER="2024.01"
 # # U_BOOT_VER="2019.10"
-TRUNCATE_IMAGE_AFTER="700M" #MB
+TRUNCATE_IMAGE_AFTER="600M" #MB
 
 # Be careful when changing the following. U-boot version should be compatible with firmware version.
 # RPI_FIRMWARE_VER="1.20210831"
