@@ -205,7 +205,7 @@ function create_image() {
     sudo cp -rv "${SCRIPT_PATH}/env.txt" /mnt/rpi/
     sudo chmod 777 /mnt/rpi/env.txt
     echo "mmc_write_offset_hex=$MMC_OFFSET_HEX" >> /mnt/rpi/env.txt
-    sudo cp -rv "/mnt/rpi/env.txt" /mnt/rpi/uboot.env
+    # sudo cp -rv "/mnt/rpi/env.txt" /mnt/rpi/uboot.env
 
 
     sync

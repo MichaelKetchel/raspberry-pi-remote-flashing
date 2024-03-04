@@ -1,5 +1,8 @@
 #!/bin/sh
 
+# This may help prevent failure on high PPS networks
+# tftptimeout 1000
+
 # Keep only MMC boot as a boot target - disable all other boot methods
 setenv boot_targets mmc0
 
@@ -14,7 +17,7 @@ env import -t $loadaddr $filesize serverip ipaddr image_name netconsole nc_ip mm
 if test $netconsole = '1'; then
     setenv nc 'setenv stdout serial,nc;setenv stdin serial;'
     # setenv nc 'setenv stdout serial,nc;setenv stdin nc;'
-    # setenv ncip $nc_ip
+    setenv ncip $nc_ip
     run nc
 fi
 
@@ -36,19 +39,16 @@ setexpr l_boot_part_end $l_boot_part_start + $l_boot_part_size
 setexpr part_offset $l_boot_part_end
 
 setexpr boot_part_start_hex $l_boot_part_start * 200
-setexpr boot_part_start_hex $boot_part_start_hex / 100000
-
 setexpr boot_part_size_hex $l_boot_part_size * 200
-setexpr boot_part_size_hex $boot_part_size_hex / 100000
 
 # Prep new MBR line
-setenv mbr_parts "name=uboot,start=0x${boot_part_start_hex}M,size=0x${boot_part_size_hex}M,bootable,id=0x0c;"
+setenv mbr_parts "name=uboot,start=0x${boot_part_start_hex},size=0x${boot_part_size_hex},bootable,id=0x0c;"
 
 # Reset file size counter so we can later check if tftp download succeeded
 setenv filesize 0
 
 # Init values for reading the first file to RAM
-setenv pt_size_bytes 400000
+# setenv pt_size_bytes 400000
 setenv ram_start_add_bytes 80000
 
 # Get file from a remote tftp server, store in RAM
@@ -63,50 +63,65 @@ if test ${filesize} > 0; then
     setexpr fileblks ${filesize} / 0x200
     blkmap map ram_disk 0 ${fileblks} mem ${fileaddr}
 
-
     # Calculate and build new MBR_parts from remote image
     part list blkmap 0 r_part_numbers
     for i in $r_part_numbers; do
         part start blkmap 0 $i r_part_start
         part size blkmap 0 $i r_part_size
         # part type blkmap 0 $i r_part_type
-        setexpr new_part_num $i+1
+        setexpr new_part_num $i + 1
         
         # Hate this, but until `part type` is fixed, figuring this out another way is a real pain
         setenv part_type "83"
         if test "${i}" = "1"; then
+            setenv first_r_part_start $r_part_start
             setenv part_type "0c"
             # Note blocks to skip from the start of the boot part in the image.
             setenv blocks_to_skip $r_part_start
         fi
 
-        setexpr r_part_start_hex $r_part_start * 200
-        setexpr r_part_start_hex $r_part_start_hex / 100000
-        setexpr r_part_start_hex $r_part_start_hex + $part_offset
+        setexpr r_part_start $r_part_start - $first_r_part_start
+        setexpr r_part_start $r_part_start + $part_offset
+        setexpr r_part_start_hex $r_part_start * 0x200
 
-        setexpr r_part_size_hex $r_part_size * 200
-        setexpr r_part_size_hex $r_part_size_hex / 100000
+        setexpr r_part_size_hex $r_part_size * 0x200
         echo "Updating part $i to $new_part_num at $r_part_start_hex"
         # echo "Updating part $i ($r_part_type) to $new_part_num at $r_part_start_hex"
-        setenv mbr_parts "${mbr_parts}start=0x${r_part_start_hex}M,size=0x${r_part_size_hex}M,id=0x${part_type};"
+        setenv mbr_parts "${mbr_parts}start=0x${r_part_start_hex},size=0x${r_part_size_hex},id=0x${part_type};"
     done
 
-    # Destroy blkmap ram_disk because we don't need it again.
-    blkmap destroy ram_disk
+    echo "MMC Partition Table:"
+    part list mmc 0
+    echo "Remote Image partition Table:"
+    part list blkmap 0
+    echo "New MBR table:"
+    printenv mbr_parts
+    # pause "New MBR built. Waiting to continue"
+    # sleep 5
+
+  
 
     # Calculate addresses and write first file (skipping the partition table) to MMC (SD Card)
     # setenv mmc_offset 16000
     # setenv mmc_offset $mmc_write_offset_hex
     setenv mmc_offset $part_offset
     # setexpr blocks_to_skip $pt_size_bytes / 200 ;
-    setexpr first_pt_offset_bytes $part_offset * 200
-    setexpr img_size_blk $filesize / 200 ;
+    setexpr first_pt_offset_bytes $blocks_to_skip * 0x200
+    setexpr img_size_blk $filesize / 0x200 ;
     setexpr blocks_to_write $img_size_blk - $blocks_to_skip ;
     setexpr ram_address_bytes $ram_start_add_bytes + $first_pt_offset_bytes ;
 
+
+    printenv
+    # pause "Ready to write first block"
+    # sleep 5
+
+    # Destroy blkmap ram_disk because we don't need it again.
+    blkmap destroy ram_disk
+
     # mmc write [RAM ADDRESS bytes] [MMC BLK ADDRES] [BLK COUNT]
-    mmc write 0x${ram_address_bytes} 0x${mmc_offset} 0x${blocks_to_write} ;
-    setexpr mmc_offset $mmc_offset + 0x${blocks_to_write} ;
+    mmc write ${ram_address_bytes} ${mmc_offset} ${blocks_to_write} ;
+    setexpr mmc_offset $mmc_offset + ${blocks_to_write} ;
     setexpr flashed_bytes $blocks_to_write * 200
 
     # init values needed for the rest of the files
@@ -132,6 +147,8 @@ if test ${filesize} > 0; then
     done
 
     echo "flashed_bytes = $flashed_bytes"
+    # pause "About to write MBR, waiting."
+    # sleep 5
     mbr write mmc 0
     mbr verify mmc 0
 
@@ -148,6 +165,8 @@ if test ${filesize} > 0; then
     tftpput ${loadaddr} 4 ${serverip}:${ethaddr}/${status}
 fi;
 
+# pause "Flash complete, waiting."
+# sleep 5
 # load cmdline.txt file to memory (used foor bootcmd)
 load mmc 0:2 0x00200008 cmdline.txt
 ## calc new filesize
@@ -176,6 +195,9 @@ part uuid mmc 0:3 part_uuid
 echo "Substituting PARTUUID values"
 setexpr cmdline sub "root=PARTUUID=[^-]+-02" "root=PARTUUID=${part_uuid}"
 
+echo "Removing resize hook REMOVE THIS BEFORE PROD!"
+setexpr cmdline sub "init=/usr/lib/raspi-config/init_resize.sh" ""
+
 # Set boot command
 setenv bootargs ${cmdline} 8250.nr_uarts=1 initcall_blacklist=bcm2708_fb_init
 
@@ -201,8 +223,10 @@ echo ""
 setenv kernel_comp_addr_r 0x1400000
 setenv kernel_comp_size 0x6000000
 
+# pause "About to boot kernel"
+# sleep 5
 echo "Booting.."
 # Boot file kernel and device
 # booti ${kernel_addr_r} - ${fdt_addr_r}
 # booti ${kernel_addr_r} ${ramdisk_addr_r} ${fdt_addr}
-# booti ${kernel_addr_r} - ${fdt_addr}
+booti ${kernel_addr_r} - ${fdt_addr}

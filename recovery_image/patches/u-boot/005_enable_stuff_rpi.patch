@@ -1,7 +1,7 @@
 diff -Nur a/configs/rpi_arm64_defconfig b/configs/rpi_arm64_defconfig
 --- a/configs/rpi_arm64_defconfig      2024-01-08 10:37:48.000000000 -0500
 +++ b/configs/rpi_arm64_defconfig    2024-02-27 22:26:54.867876543 -0500
-@@ -57,3 +57,14 @@
+@@ -57,3 +57,18 @@
  CONFIG_VIDEO_BCM2835=y
  CONFIG_CONSOLE_SCROLL_LINES=10
  CONFIG_PHYS_TO_BUS=y
@@ -16,10 +16,14 @@ diff -Nur a/configs/rpi_arm64_defconfig b/configs/rpi_arm64_defconfig
 +CONFIG_BLKMAP=y
 +CONFIG_HUSH_PARSER=y
 +CONFIG_PARTITION_TYPE_GUID=y
++CONFIG_CMD_PAUSE=y
++CONFIG_CMD_RNG=y
++CONFIG_CMD_UUID=y
++CONFIG_CMD_EXT4_WRITE=y
 diff -Nur a/configs/rpi_defconfig b/configs/rpi_defconfig
 --- a/configs/rpi_defconfig        2024-02-27 23:08:07.016100383 -0500
 +++ b/configs/rpi_defconfig      2024-02-27 23:08:14.372083822 -0500
-@@ -50,3 +50,14 @@
+@@ -50,3 +50,18 @@
  CONFIG_CONSOLE_SCROLL_LINES=10
  CONFIG_PHYS_TO_BUS=y
  CONFIG_EFI_LOADER=y
@@ -34,3 +38,7 @@ diff -Nur a/configs/rpi_defconfig b/configs/rpi_defconfig
 +CONFIG_BLKMAP=y
 +CONFIG_HUSH_PARSER=y
 +CONFIG_PARTITION_TYPE_GUID=y
++CONFIG_CMD_PAUSE=y
++CONFIG_CMD_RNG=y
++CONFIG_CMD_UUID=y
++CONFIG_CMD_EXT4_WRITE=y
