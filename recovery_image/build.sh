@@ -41,6 +41,8 @@ TRUNCATE_IMAGE_AFTER="600M" #MB
 RPI_FIRMWARE_VER="1.20230405"
 # U_BOOT_VER="2021.10"
 U_BOOT_VER="2024.01"
+USE_LOCAL_UBOOT=true
+LOCAL_UBOOT_PATH="${SCRIPT_PATH}/../../u-boot"
 
 # Toolchain for 32 bits: arm-linux-gnueabi
 # Toolchain for 64 bits: aarch64-linux-gnu
@@ -94,23 +96,37 @@ function get_sources() {
         tar -xzf ${RPI_FIRMWARE_VER}.tar.gz
     fi
 
+
     # U-BOOT
-    if [ ! -f "v${U_BOOT_VER}.tar.gz" ]; then
-        print_title "Downloading U-Boot ${U_BOOT_VER} sources"
-        wget "https://github.com/u-boot/u-boot/archive/v${U_BOOT_VER}.tar.gz"
+    if [ "$USE_LOCAL_UBOOT" = true ]; then
+        rsync -a --progress "$LOCAL_UBOOT_PATH/" "./u-boot-local" --delete --exclude .git
+    else
+        if [ ! -f "v${U_BOOT_VER}.tar.gz" ]; then
+            print_title "Downloading U-Boot ${U_BOOT_VER} sources"
+            wget "https://github.com/u-boot/u-boot/archive/v${U_BOOT_VER}.tar.gz"
+        fi
     fi
 }
 
 function patch_sources() {
-    if [ ! -d "u-boot-${U_BOOT_VER}" ]; then
-        tar -xzf "v${U_BOOT_VER}.tar.gz"
-
+    if [ "$USE_LOCAL_UBOOT" = true ]; then
         print_title "Patching U-BOOT.."
-        # apply u-boot patches
-        cd "u-boot-${U_BOOT_VER}"
+        cd "${SOURCES_PATH}/u-boot-local"
         for i in "${PATCHES_PATH}"/u-boot/*.patch; do patch -p1 -l <"$i"; done
         cd -
+    else
+        if [ ! -d "u-boot-${U_BOOT_VER}" ]; then
+            tar -xzf "v${U_BOOT_VER}.tar.gz"
+
+            print_title "Patching U-BOOT.."
+            # apply u-boot patches
+            cd "u-boot-${U_BOOT_VER}"
+            for i in "${PATCHES_PATH}"/u-boot/*.patch; do patch -p1 -l <"$i"; done
+            cd -
+        fi
     fi
+
+
 }
 
 function build_sources() {
@@ -118,7 +134,12 @@ function build_sources() {
 
     # Build U-BOOT
     print_title "Building U-BOOT.."
-    cd "${SOURCES_PATH}/u-boot-${U_BOOT_VER}"
+
+    if [ "$USE_LOCAL_UBOOT" = true ]; then
+        cd "${SOURCES_PATH}/u-boot-local"
+    else
+        cd "${SOURCES_PATH}/u-boot-${U_BOOT_VER}"
+    fi
     make ARCH=arm CROSS_COMPILE=${TOOLCHAIN}- ${DEFCONFIG}
     make ARCH=arm CROSS_COMPILE=${TOOLCHAIN}- -j"$(nproc)"
 
@@ -152,8 +173,9 @@ function create_image() {
     UBOOT_PARTITION_END=$(( BOOT_PART_SIZE_ALIGNED + IMAGE_ROOTFS_ALIGNMENT ))
     BOOT_PARTITION_END=$(( UBOOT_PARTITION_END + BOOT_PART_SIZE_ALIGNED ))
 
-    MMC_WRITE_OFFSET=$((UBOOT_PARTITION_END * 1024 / 512))
-    MMC_OFFSET_HEX=$(printf "%x\n" $MMC_WRITE_OFFSET)
+    TRUNCATE_IMAGE_AFTER=${UBOOT_PARTITION_END}
+    # MMC_WRITE_OFFSET=$((UBOOT_PARTITION_END * 1024 / 512))
+    # MMC_OFFSET_HEX=$(printf "%x\n" $MMC_WRITE_OFFSET)
 
     sudo dd if=/dev/zero of=${IMAGE_PATH} bs=1024 count=0 seek=${SDIMG_SIZE}
     sudo parted -s ${IMAGE_PATH} mklabel msdos
@@ -200,11 +222,15 @@ function create_image() {
     # sudo cp -rv "${SCRIPT_PATH}/cmdline.txt" /mnt/rpi/
 
     # Copy U-BOOT Files
-    sudo cp -rv "${SOURCES_PATH}/u-boot-${U_BOOT_VER}/u-boot.bin" /mnt/rpi/
+    if [ "$USE_LOCAL_UBOOT" = true ]; then
+        sudo cp -rv "${SOURCES_PATH}/u-boot-local/u-boot.bin" /mnt/rpi/
+    else
+        sudo cp -rv "${SOURCES_PATH}/u-boot-${U_BOOT_VER}/u-boot.bin" /mnt/rpi/
+    fi
     sudo cp -rv "${BUILD_PATH}/boot.scr.uimg" /mnt/rpi/
     sudo cp -rv "${SCRIPT_PATH}/env.txt" /mnt/rpi/
     sudo chmod 777 /mnt/rpi/env.txt
-    echo "mmc_write_offset_hex=$MMC_OFFSET_HEX" >> /mnt/rpi/env.txt
+    # echo "mmc_write_offset_hex=$MMC_OFFSET_HEX" >> /mnt/rpi/env.txt
     # sudo cp -rv "/mnt/rpi/env.txt" /mnt/rpi/uboot.env
 
 
@@ -227,7 +253,7 @@ function truncating_image() {
 
     echo ""
     print_title "Truncating recovery image after ${TRUNCATE_IMAGE_AFTER} .."
-    truncate --size ${TRUNCATE_IMAGE_AFTER} "${IMAGE_PATH}"
+    truncate --size ${TRUNCATE_IMAGE_AFTER}KiB "${IMAGE_PATH}"
 }
 
 function compress_image() {
@@ -240,7 +266,12 @@ function copy_artifacts() {
     mkdir -p "${ARTIFACTS_PATH}"
     mv -v "${BUILD_PATH}/recovery.tar.bz2" "${ARTIFACTS_PATH}"
     cp -rv "${BUILD_PATH}/boot.scr.uimg" "${ARTIFACTS_PATH}"
-    cp -rv "${SOURCES_PATH}/u-boot-${U_BOOT_VER}/u-boot.bin" "${ARTIFACTS_PATH}"
+    if [ "$USE_LOCAL_UBOOT" = true ]; then
+        cp -rv "${SOURCES_PATH}/u-boot-local/u-boot.bin" "${ARTIFACTS_PATH}"
+    else
+        cp -rv "${SOURCES_PATH}/u-boot-${U_BOOT_VER}/u-boot.bin" "${ARTIFACTS_PATH}"
+    fi
+    
 }
 
 function print_header() {

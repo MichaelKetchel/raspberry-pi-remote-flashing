@@ -1,6 +1,7 @@
 need: dosfstools make bison flex kpartx u-boot-tools gcc-arm-linux-gnueabi libncurses-dev
 libssl-dev
 gcc-aarch64-linux-gnu
+bc
 
 also need to run build.sh as root, unfortunately.
 
@@ -113,3 +114,42 @@ echo "$a"
 # end
 
 ```
+
+mbr_parts=name=uboot,start=0x400000,size=0x10000000,bootable,id=0x0c;start=0x10400000,size=0x20000000,id=0x0c;start=0x30400000,size=0x83000000,id=0x83;
+
+
+mbr_parts=uuid_disk=7077119d-ef5f-da4b-a7c4-3b41f827580e;name=uboot,start=0x400000,size=0x10000000,bootable,id=0x0c;start=0x10400000,size=0x20000000,id=0x0c;start=0x30400000,size=0x83000000,id=0x83;
+
+
+uuid_disk
+
+
+
+Original bootargs:
+cmdline=console=serial0,115200 console=tty1 root=PARTUUID=4e639091-02 rootfstype=ext4 fsck.repair=yes rootwait quiet init=/usr/lib/raspberrypi-sys-mods/firstboot
+
+substituting rootfs partition: mmcblk0p2 -> mmcblk0p3
+
+substituting serial output: serial0 -> ttyS0
+
+Substituting PARTUUID values
+Removing resize hook REMOVE THIS BEFORE PROD!
+New bootargs:
+bootargs=console=ttyS0,115200 console=tty1 root=PARTUUID=00000000-03 rootfstype=ext4 fsck.repair=yes rootwait quiet init=/usr/lib/raspberrypi-sys-mods/firstboot 8250.nr_uarts=1 initcall_blacklist=bcm2708_fb_init
+
+ext4load mmc 0:3 0x00200006 /etc/fstab
+setexpr fstab_size $filesize + 6
+mw.w 0x00200000 0x7366 
+mw.l 0x00200002 0x3d626174
+md.b 0x00200000 ${fstab_size}
+
+replmem 0x00200006 $filesize "PARTUUID=4e639091-02" "PARTUUID=12345678-03"
+env import -t 0x00200000 $fstab_size fstab
+printenv fstab
+
+
+setenv testvar $cmdline
+part uuid mmc 0:1 testvar
+print testvar
+setexpr testvar sub "([^-]+)-.." "\1" 
+print testvar
